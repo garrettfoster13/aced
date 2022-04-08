@@ -14,15 +14,6 @@ from .response import Response
 from .sid import KNOWN_SIDS, name_from_sid
 import traceback
 
-EXTRIGHTS_GUID_MAPPING = {
-    "GetChanges": string_to_bin("1131F6AA-9C07-11D1-F79F-00C04FC2DCD2"),
-    "GetChangesAll": string_to_bin("1131F6AD-9C07-11D1-F79F-00C04FC2DCD2"),
-    "WriteMember": string_to_bin("BF9679C0-0DE6-11D0-A285-00AA003049E2"),
-    "UserForceChangePassword": string_to_bin("00299570-246D-11D0-A768-00AA006E05299"),
-    "AllowedToAct": string_to_bin("3F78C3E5-F79A-46BD-A0B8-9D18116DDC79"),
-    "WriteSPN": string_to_bin("F3A64788-5306-11D1-A9C5-0000F80367C1"),
-}
-
 
 def arg_parse():
 	parser = argparse.ArgumentParser(add_help=True, description="Tool to enumerate a single target's DACL in Active Directory")
@@ -254,11 +245,6 @@ def print_user(user, sids_resolver):
 		else:
 			continue
 
-
-		# list of permissions we care about:
-		# ReadLAPSPassword
-
-
 		# Generic Write
 		if mask.hasPriv(mask.GENERIC_WRITE):
 			write_property_sids.add(sid)
@@ -327,10 +313,6 @@ def print_user(user, sids_resolver):
 	print("    Principals that can add themself to group:")
 	print_sids(addself_property_sids, sids_resolver, offset=6)
 
-	#
-
-
-
 	# generic permissions
 	if (len(genericwrite_property_sids) > 0) or (len(genericall_property_sids) > 0):
 		print("  Generic Permissions:")
@@ -344,7 +326,6 @@ def print_user(user, sids_resolver):
 			print_sids(genericall_property_sids, sids_resolver, offset=6)
 		else:
 			print("      No entries found.")
-
 
 def print_sids(sids, sids_resolver, offset=0):
 	blanks = " " * offset
