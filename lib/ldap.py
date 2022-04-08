@@ -1,6 +1,6 @@
 
 from impacket.ldap import ldap, ldapasn1
-from impacket.ldap.ldaptypes import SR_SECURITY_DESCRIPTOR, ACCESS_ALLOWED_OBJECT_ACE
+from impacket.ldap.ldaptypes import SR_SECURITY_DESCRIPTOR, ACCESS_ALLOWED_OBJECT_ACE, ACCESS_ALLOWED_ACE
 
 from .smb import get_machine_name
 

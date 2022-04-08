@@ -7,6 +7,8 @@ class Response:
     def __init__(self):
         self.samaccountname = ""
         self.security_descriptor = SR_SECURITY_DESCRIPTOR()
+        self.description = ""
+
 
 
     @property

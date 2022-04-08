@@ -1,4 +1,4 @@
-import ldapsearchlib
+import lib
 
 if __name__ == '__main__':
-	ldapsearchlib.main()
+	lib.main()
