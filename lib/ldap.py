@@ -11,52 +11,38 @@ def ldap_results(resp):
         if isinstance(item, ldapasn1.SearchResultEntry):
             yield item
 
-
 def connect_ldap(
         domain,
         user,
         password="",
-        lmhash="",
-        nthash="",
-        aesKey="",
         dc_ip=None,
-        kerberos=False,
+        scheme="",
 ):
 
     base_dn = get_base_dn(domain)
 
-    if kerberos:
-        target = get_machine_name(domain, dc_ip)
+    if dc_ip is not None:
+        target = dc_ip
     else:
-        if dc_ip is not None:
-            target = dc_ip
-        else:
-            target = domain
+        target = domain
+
+    if scheme is not None:
+        if "ldap" in scheme:
+            url = 'ldap://%s' %target
+    else:
+        url = 'ldaps://%s' %target
 
     ldap_conn = ldap.LDAPConnection(
-        url='ldap://%s' % target,
+        url,
         baseDN=base_dn,
         dstIp=dc_ip
     )
 
-    if kerberos:
-        ldap_conn.kerberosLogin(
-            user=user,
-            password=password,
-            domain=domain,
-            lmhash=lmhash,
-            nthash=nthash,
-            aesKey=aesKey,
-            kdcHost=dc_ip,
-        )
-    else:
-        ldap_conn.login(
-            user=user,
-            password=password,
-            domain=domain,
-            lmhash=lmhash,
-            nthash=nthash,
-        )
+    ldap_conn.login(
+        user=user,
+        password=password,
+        domain=domain
+    )
 
     return ldap_conn
 

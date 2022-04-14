@@ -33,30 +33,12 @@ def arg_parse():
 		help = "IP address of domain controller"
 		)
 
-	auth_group.add_argument(
-		"-k", "--kerberos",
-		action="store_true",
-		help='Use Kerberos authentication. Retrieves credentials from ccache file '
-		'(KRB5CCNAME) based on the target parameters. If valid credentials cannot be found, it will use the '
-		'ones specified on the command line'
-		)
 
 	auth_group.add_argument(
-		"-n", "--no-pass",
-		action="store_true",
-		help="Don't ask for password. (useful for -k)"
-		)
+	"-s","--scheme",
+	help="LDAP scheme to bind to (ldap/ldaps)"
+	)
 
-	auth_group.add_argument(
-		"--aes",
-		action="store_true",
-		help="AES key to use for Kerberos Authentication (128 or 256 bits"
-		)
-
-	auth_group.add_argument(
-		"--hashes",
-		help="LM and NT hashes, format is LMHASH:NTHASH"
-		)
 	search_group.add_argument(
 		"-principal",
 		required=True,
@@ -73,14 +55,16 @@ def arg_parse():
 	args.password = args.target[2]
 	args.address = args.target[3]
 
-	args.lmhash = ""
-	args.nthash = ""
 
-	if args.hashes:
-		args.lmhash, args.nthash = args.hashes.split(":")
-
-	if not (args.password or args.lmhash or args.nthash or args.aes or args.no_pass):
+	if not args.password:
 		args.password = getpass("Password:")
+
+	if args.scheme:
+		if args.scheme not in ["ldap", "ldaps"]:
+			print("Invalid scheme selection.")
+			sys.exit()
+		else:
+			pass
 
 	return args
 
@@ -120,7 +104,6 @@ def fetch_users(ldap_conn, domain, principal):
 
 	user_filter = "(sAMAccountName={})".format(principal)
 	search_base = "{}".format(get_base_dn(domain))
-	print ()
 	resp = search_ldap(
 		ldap_conn,
 		user_filter,
@@ -128,22 +111,18 @@ def fetch_users(ldap_conn, domain, principal):
 		controls = security_descriptor_control(sdflags=0x05))
 
 	for item in ldap_results(resp):
-		if not item:
-			print("Principal Not Found")
-			exit()
-		else:
-			user = Response()
+		user = Response()
 
-			for attribute in item['attributes']:
-				at_type=str(attribute['type'])
-				if at_type == 'sAMAccountName':
-					user.samaccountname = str(attribute['vals'][0])
-				elif at_type == 'description':
-					user.description = str(attribute['vals'][0])
-				elif at_type == 'nTSecurityDescriptor':
-					secdesc = attribute['vals'][0].asOctets()
-					user.security_descriptor.fromString(secdesc)
-			yield user
+		for attribute in item['attributes']:
+			at_type=str(attribute['type'])
+			if at_type == 'sAMAccountName':
+				user.samaccountname = str(attribute['vals'][0])
+			elif at_type == 'description':
+				user.description = str(attribute['vals'][0])
+			elif at_type == 'nTSecurityDescriptor':
+				secdesc = attribute['vals'][0].asOctets()
+				user.security_descriptor.fromString(secdesc)
+		yield user
 
 #objecttypes
 FORCE_CHANGE_PASSWORD = "00299570-246d-11d0-a768-00aa006e0529"
@@ -153,7 +132,7 @@ GET_CHANGES = "1131f6aa-9c07-11d1-f79f-00c04fc2dcd2"
 GET_CHANGES_ALL = "1131f6ad-9c07-11d1-f79f-00c04fc2dcd2"
 ALLOWED_TO_ACT = "3f78c3e5-f79a-46bd-a0b8-9d18116ddc79"
 WRITE_MEMBER = "bf9679c0-0de6-11d0-a285-00aa003049e2"
-			
+
 def print_user(user, sids_resolver):
 	print ("Name: {}".format(user.samaccountname))
 	print ("Description: {}".format(user.description))
@@ -169,7 +148,7 @@ def print_user(user, sids_resolver):
 	addself_property_sids = set()
 	writemember_property_sids = set()
 	allowedtoact_property_sids = set()
-	
+
 	#generic ACEs
 	genericall_property_sids = set()
 	genericwrite_property_sids = set()
@@ -189,9 +168,20 @@ def print_user(user, sids_resolver):
 			ace = ace["Ace"]
 			mask = ace["Mask"]
 			sid = ace["Sid"].formatCanonical()
+
 			if ace.hasFlag(ace.ACE_OBJECT_TYPE_PRESENT):
+				#check generics first
+				if mask.hasPriv(ACCESS_MASK.GENERIC_ALL):
+					genericall_property_sids.add(sid)
+				elif mask.hasPriv(ACCESS_MASK.GENERIC_WRITE):
+					genericwrite_property_sids.add(sid)
+				elif mask.hasPriv(ACCESS_MASK.WRITE_OWNER):
+					write_owner_sids.add(sid)
+				elif mask.hasPriv(ACCESS_MASK.WRITE_DACL):
+					write_owner_sids.add(sid)
+
 				# ForceChangePassword
-				if guid_to_string(ace["ObjectType"]) == FORCE_CHANGE_PASSWORD:
+				elif guid_to_string(ace["ObjectType"]) == FORCE_CHANGE_PASSWORD:
 					changepass_property_sids.add(sid)
 				# getchanges
 				elif guid_to_string(ace["ObjectType"]) == GET_CHANGES:
@@ -220,6 +210,7 @@ def print_user(user, sids_resolver):
 				elif mask.hasPriv(ace.ADS_RIGHT_DS_SELF):
 					if guid_to_string(ace["ObjectType"]) == WRITE_MEMBER:
 						addself_property_sids.add(sid)
+			# empty objecttype but ADS_RIGHT true means it applies to all objects
 			if not ace.hasFlag(ace.ACE_OBJECT_TYPE_PRESENT):
 				# all extended rights
 				if mask.hasPriv(ace.ADS_RIGHT_DS_CONTROL_ACCESS):
@@ -228,40 +219,26 @@ def print_user(user, sids_resolver):
 				elif mask.hasPriv(ace.ADS_RIGHT_DS_WRITE_PROP):
 					genericwrite_property_sids.add(sid)
 
-		#ACE type 0x00	
+		#ACE type 0x00
 		elif ace["TypeName"] == "ACCESS_ALLOWED_ACE":
 			ace = ace["Ace"]
 			mask = ace["Mask"]
 			sid = ace["Sid"].formatCanonical()
-			if mask.hasPriv(mask.GENERIC_ALL):
+			if mask.hasPriv(ACCESS_MASK.GENERIC_ALL):
 				genericall_property_sids.add(sid)
-			if mask.hasPriv(mask.GENERIC_WRITE):
+			if mask.hasPriv(ACCESS_MASK.GENERIC_WRITE):
 				genericwrite_property_sids.add(sid)
-			if mask.hasPriv(mask.WRITE_OWNER):
+			if mask.hasPriv(ACCESS_MASK.WRITE_OWNER):
 				write_owner_sids.add(sid)
-			if mask.hasPriv(mask.WRITE_DACL):
+			if mask.hasPriv(ACCESS_MASK.WRITE_DACL):
 				write_dacl_sids.add(sid)
+			if mask.hasPriv(ACCESS_MASK.ADS_RIGHT_DS_CONTROL_ACCESS):
+				allextended_property_sids.add(sid)
 
-		else:
-			continue
+		# else:
+		# 	continue
 
-		# Generic Write
-		if mask.hasPriv(mask.GENERIC_WRITE):
-			write_property_sids.add(sid)
-
-		# #Write DACL
-		if mask.hasPriv(mask.WRITE_DACL):
-			write_dacl_sids.add(sid)
-
-		# Write Owner
-		if mask.hasPriv(mask.WRITE_OWNER):
-			write_owner_sids.add(sid)
-
-		# Generic All
-		if mask.hasPriv(mask.GENERIC_ALL):
-			genericall_property_sids.add(sid)
-
-	print("\n  Interesting Permissions:")
+	print("  Interesting Permissions:")
 	print("    Principals that can change target's password:")
 	if len(changepass_property_sids) > 0:
 		print_sids(changepass_property_sids, sids_resolver, offset=6)
@@ -287,6 +264,7 @@ def print_user(user, sids_resolver):
 		print("      No entries found.")
 	print("")
 
+	# DCSYNC
 	if (len(getchanges_property_sids) > 0) or (len(getchanges_all_property_sids) > 0):
 		print("  DCSYNC Rights:")
 		print("    Principals with GetChanges:")
@@ -295,6 +273,7 @@ def print_user(user, sids_resolver):
 		if len(getchanges_all_property_sids) > 0:
 			print("    Principals with GetChangesAll:")
 		print_sids(getchanges_all_property_sids, sids_resolver, offset=6)
+	print ("")
 
 	# write permissions
 	print("  Write Permissions:")
@@ -306,12 +285,17 @@ def print_user(user, sids_resolver):
 	print("")
 
 	# group permissionsa
-
-	print("  Group Permissions:")
-	print("   Principals that can add members to group:")
-	print_sids(writemember_property_sids, sids_resolver, offset=6)
-	print("    Principals that can add themself to group:")
-	print_sids(addself_property_sids, sids_resolver, offset=6)
+	if (len(writemember_property_sids) > 0) or (len(addself_property_sids) > 0):
+		print("  Group Permissions:")
+		print("   Principals that can add members to group:")
+		if len(writemember_property_sids) > 0:
+			print_sids(writemember_property_sids, sids_resolver, offset=6)
+		else: print("      No entries found.")
+		print("    Principals that can add themself to group:")
+		if len(addself_property_sids) > 0:
+			print_sids(addself_property_sids, sids_resolver, offset=6)
+		else: print("      No entries found.")
+	print("")
 
 	# generic permissions
 	if (len(genericwrite_property_sids) > 0) or (len(genericall_property_sids) > 0):
@@ -326,6 +310,7 @@ def print_user(user, sids_resolver):
 			print_sids(genericall_property_sids, sids_resolver, offset=6)
 		else:
 			print("      No entries found.")
+	print("")
 
 def print_sids(sids, sids_resolver, offset=0):
 	blanks = " " * offset
@@ -373,7 +358,7 @@ def ldap_get_domain_from_sid(ldap_conn, sid):
                 return str(attribute["vals"][0])
 
                 name = ".".join([x.lstrip("DC=") for x in value.split(",")])
-                return 
+                return
 
 def main():
 
@@ -382,11 +367,8 @@ def main():
 		domain=args.userdomain,
 		user=args.username,
 		password=args.password,
-		lmhash=args.lmhash,
-		nthash=args.nthash,
-		aesKey=args.aes,
 		dc_ip=args.address,
-		kerberos=args.kerberos
+		scheme=args.scheme
 	)
 
 	sids_resolver = SidsResolver(ldap_conn)
@@ -442,6 +424,60 @@ class SidsResolver:
         self.domain_sids[sid] = name
         return name
 
+class ACCESS_MASK:
+    # Flag constants
+
+    # These constants are only used when WRITING
+    # and are then translated into their actual rights
+    SET_GENERIC_READ        = 0x80000000
+    SET_GENERIC_WRITE       = 0x04000000
+    SET_GENERIC_EXECUTE     = 0x20000000
+    SET_GENERIC_ALL         = 0x10000000
+    # When reading, these constants are actually represented by
+    # the following for Active Directory specific Access Masks
+    # Reference: https://docs.microsoft.com/en-us/dotnet/api/system.directoryservices.activedirectoryrights?view=netframework-4.7.2
+    GENERIC_READ            = 0x00020094
+    GENERIC_WRITE           = 0x00020028
+    GENERIC_EXECUTE         = 0x00020004
+    GENERIC_ALL             = 0x000F01FF
+
+    # These are actual rights (for all ACE types)
+    MAXIMUM_ALLOWED         = 0x02000000
+    ACCESS_SYSTEM_SECURITY  = 0x01000000
+    SYNCHRONIZE             = 0x00100000
+    WRITE_OWNER             = 0x00080000
+    WRITE_DACL              = 0x00040000
+    READ_CONTROL            = 0x00020000
+    DELETE                  = 0x00010000
+
+    # ACE type specific mask constants (for ACCESS_ALLOWED_OBJECT_ACE)
+    # Note that while not documented, these also seem valid
+    # for ACCESS_ALLOWED_ACE types
+    ADS_RIGHT_DS_CONTROL_ACCESS         = 0x00000100
+    ADS_RIGHT_DS_CREATE_CHILD           = 0x00000001
+    ADS_RIGHT_DS_DELETE_CHILD           = 0x00000002
+    ADS_RIGHT_DS_READ_PROP              = 0x00000010
+    ADS_RIGHT_DS_WRITE_PROP             = 0x00000020
+    ADS_RIGHT_DS_SELF                   = 0x00000008
+
+    def __init__(self, mask):
+        self.mask = mask
+
+    def has_priv(self, priv):
+        return self.mask & priv == priv
+
+    def set_priv(self, priv):
+        self.mask |= priv
+
+    def remove_priv(self, priv):
+        self.mask ^= priv
+
+    def __repr__(self):
+        out = []
+        for name, value in iteritems(vars(ACCESS_MASK)):
+            if not name.startswith('_') and type(value) is int and self.has_priv(value):
+                out.append(name)
+        return "<ACCESS_MASK RawMask=%d Flags=%s>" % (self.mask, ' | '.join(out))
 
 
 
