@@ -9,7 +9,7 @@ import binascii
 from impacket.examples.utils import parse_credentials, parse_target
 from impacket.uuid import string_to_bin, bin_to_string
 
-from .ldap import connect_ldap, get_base_dn, search_ldap, ldap_results, security_descriptor_control, SR_SECURITY_DESCRIPTOR, ACCESS_ALLOWED_OBJECT_ACE, ACCESS_ALLOWED_ACE
+from .ldap import connect_ldap, get_base_dn, search_ldap, ldap_results, security_descriptor_control, SR_SECURITY_DESCRIPTOR, ACCESS_ALLOWED_OBJECT_ACE, ACCESS_ALLOWED_ACE, ACE
 from .response import Response
 from .sid import KNOWN_SIDS, name_from_sid
 import traceback
@@ -18,26 +18,29 @@ import traceback
 def arg_parse():
 	parser = argparse.ArgumentParser(add_help=True, description="Tool to enumerate a single target's DACL in Active Directory")
 
-	auth_group = parser.add_argument_group("Authentication Settings")
+	auth_group = parser.add_argument_group("Authentication")
 	search_group = parser.add_argument_group("Search target")
+	optional_group = parser.add_argument_group("Optional Flags")
 
 	auth_group.add_argument(
 		'target',
 		action='store',
-		help='[[domain/username[:password]@]<targetname or address',
+		help='[[domain/username[:password]@]<address>',
 		type=target_type
 		)
 
-	auth_group.add_argument(
-		"-dc", "--dc-ip",
-		help = "IP address of domain controller"
+	optional_group.add_argument(
+		"-dc-ip",
+		help = "IP address of domain controller",
+		required=False
 		)
 
 
-	auth_group.add_argument(
-	"-s","--scheme",
-	help="LDAP scheme to bind to (ldap/ldaps)"
-	)
+	optional_group.add_argument(
+		"-scheme",
+		help="LDAP scheme to bind to (ldap/ldaps). Aced defaults to ldaps.",
+		required=False
+		)
 
 	search_group.add_argument(
 		"-principal",
@@ -140,7 +143,7 @@ def print_user(user, sids_resolver):
 	owner_domain, owner_name = sids_resolver.get_name_from_sid(owner_sid)
 	print("Owner SID: {} {}\{}".format(user.owner_sid.formatCanonical(), owner_domain, owner_name))
 
-	#write ACEs
+	#write perms
 	write_owner_sids = set()
 	write_dacl_sids = set()
 	writespn_property_sids = set()
@@ -149,17 +152,17 @@ def print_user(user, sids_resolver):
 	writemember_property_sids = set()
 	allowedtoact_property_sids = set()
 
-	#generic ACEs
+	#generic perms
 	genericall_property_sids = set()
 	genericwrite_property_sids = set()
 
-	# Extended Rights
+	# Extended perms
 	changepass_property_sids = set()
 	allextended_property_sids = set()
 	getchanges_property_sids = set()
 	getchanges_all_property_sids = set()
 
-	# Read
+	# Read perms
 	readlaps_property_sids = set()
 
 	for ace in user.dacl.aces:
