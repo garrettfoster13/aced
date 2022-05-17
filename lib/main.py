@@ -127,14 +127,36 @@ def fetch_users(ldap_conn, domain, principal):
 				user.security_descriptor.fromString(secdesc)
 		yield user
 
-#objecttypes
-FORCE_CHANGE_PASSWORD = "00299570-246d-11d0-a768-00aa006e0529"
-WRITE_SPN = "f3a64788-5306-11d1-a9c5-0000f80367c1"
-WRITE_KEY = "5b47d60f-6090-40b2-9f37-2a4de88f3063"
-GET_CHANGES = "1131f6aa-9c07-11d1-f79f-00c04fc2dcd2"
-GET_CHANGES_ALL = "1131f6ad-9c07-11d1-f79f-00c04fc2dcd2"
-ALLOWED_TO_ACT = "3f78c3e5-f79a-46bd-a0b8-9d18116ddc79"
-WRITE_MEMBER = "bf9679c0-0de6-11d0-a285-00aa003049e2"
+def resolve_key():
+	args = arg_parse()
+	ldap_conn = connect_ldap(
+		domain=args.userdomain,
+		user=args.username,
+		password=args.password,
+		dc_ip=args.address,
+		scheme=args.scheme
+	)
+
+	domain = args.userdomain
+	guid_filter = "(cn=ms-DS-Key-Credential-Link)"
+	search_base = "CN=Schema,CN=Configuration,{}".format(get_base_dn(domain))
+	
+	resp = search_ldap(
+		ldap_conn,
+		guid_filter,
+		search_base)
+
+	for item in ldap_results(resp):
+		for attribute in item['attributes']:
+			at_type=str(attribute['type'])
+			if at_type == 'schemaIDGUID':
+				guid = guid_to_string(attribute['vals'][0])
+		return guid
+
+
+
+
+
 
 def print_user(user, sids_resolver):
 	print ("Name: {}".format(user.samaccountname))
@@ -315,6 +337,9 @@ def print_user(user, sids_resolver):
 			print("      No entries found.")
 	print("")
 
+	# testing
+	print(WRITE_KEY)
+
 def print_sids(sids, sids_resolver, offset=0):
 	blanks = " " * offset
 	msg = []
@@ -362,6 +387,15 @@ def ldap_get_domain_from_sid(ldap_conn, sid):
 
                 name = ".".join([x.lstrip("DC=") for x in value.split(",")])
                 return
+
+#objecttypes
+FORCE_CHANGE_PASSWORD = "00299570-246d-11d0-a768-00aa006e0529"
+WRITE_SPN = "f3a64788-5306-11d1-a9c5-0000f80367c1"
+WRITE_KEY = resolve_key()
+GET_CHANGES = "1131f6aa-9c07-11d1-f79f-00c04fc2dcd2"
+GET_CHANGES_ALL = "1131f6ad-9c07-11d1-f79f-00c04fc2dcd2"
+ALLOWED_TO_ACT = "3f78c3e5-f79a-46bd-a0b8-9d18116ddc79"
+WRITE_MEMBER = "bf9679c0-0de6-11d0-a285-00aa003049e2"
 
 def main():
 
