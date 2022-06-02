@@ -5,14 +5,38 @@ from getpass import getpass
 import base64
 import sys
 import binascii
+import json
+import os
 
 from impacket.examples.utils import parse_credentials, parse_target
+from impacket.examples import logger
+import logging
 from impacket.uuid import string_to_bin, bin_to_string
 
 from .ldap import connect_ldap, get_base_dn, search_ldap, ldap_results, security_descriptor_control, SR_SECURITY_DESCRIPTOR, ACCESS_ALLOWED_OBJECT_ACE, ACCESS_ALLOWED_ACE, ACE
 from .response import Response
 from .sid import KNOWN_SIDS, name_from_sid
+from .logoutput import logoutput
 import traceback
+
+
+
+show_banner = '''
+
+          _____
+         |A .  | _____
+         | /.\ ||A ^  | _____
+         |(_._)|| / \ ||A _  | _____
+         |  |  || \ / || ( ) ||A_ _ |
+         |____V||  .  ||(_'_)||( v )|
+                |____V||  |  || \ / |
+                       |____V||  .  |
+                              |____V|
+
+			 Parse and log a target principal's DACL.
+							@garrfoster
+                               
+'''
 
 
 def arg_parse():
@@ -34,18 +58,45 @@ def arg_parse():
 		help = "IP address of domain controller",
 		required=False
 		)
+	optional_group.add_argument(
+		"-k", "--kerberos",
+		action="store_true",
+        help='Use Kerberos authentication. Grabs credentials from ccache file '
+        '(KRB5CCNAME) based on target parameters. If valid credentials cannot be found, it will use the '
+        'ones specified in the command line'
+    	)
+	
+	optional_group.add_argument(
+		"-n", "--no-pass",
+		action="store_true",
+		help="don't ask for password (useful for -k)"
+    )
+	
+	optional_group.add_argument(
+		"--hashes",
+		metavar="LMHASH:NTHASH",
+		help="LM and NT hashes, format is LMHASH:NTHASH",
+    )
 
+	optional_group.add_argument(
+    	'--aes',
+    	action="store",
+    	metavar="hex key",
+    	help='AES key to use for Kerberos Authentication (128 or 256 bits)'
+    	)
 
 	optional_group.add_argument(
 		"-scheme",
 		help="LDAP scheme to bind to (ldap/ldaps). Aced defaults to ldaps.",
 		required=False
 		)
+	
+	optional_group.add_argument(
+		"-debug",
+		help="LDAP scheme to bind to (ldap/ldaps). Aced defaults to ldaps.",
+		required=False
+		)
 
-	search_group.add_argument(
-		"-principal",
-		required=True,
-		help="Account name to search for")
 
 	if len(sys.argv) == 1:
 		parser.print_help()
@@ -58,8 +109,12 @@ def arg_parse():
 	args.password = args.target[2]
 	args.address = args.target[3]
 
+	args.lmhash = ""
+	args.nthash = ""
+	if args.hashes:
+		args.lmhash, args.nthash = args.hashes.split(':')
 
-	if not args.password:
+	if not (args.password or args.lmhash or args.nthash or args.aes or args.no_pass):
 		args.password = getpass("Password:")
 
 	if args.scheme:
@@ -103,19 +158,20 @@ def target_creds_type(target):
 
     return (userdomain, username, password or '', '')
 
-def fetch_users(ldap_conn, domain, principal):
-
-	user_filter = "(sAMAccountName={})".format(principal)
+def fetch_users(ldap_conn, domain, samaccountname, logs_dir):
+	user_filter = "(sAMAccountName={})".format(samaccountname)
 	search_base = "{}".format(get_base_dn(domain))
 	resp = search_ldap(
 		ldap_conn,
 		user_filter,
 		search_base,
-		controls = security_descriptor_control(sdflags=0x05))
+		controls = security_descriptor_control(sdflags=0x07))
 
 	for item in ldap_results(resp):
+		# get_formatted_value(item)
+		logger = logoutput(item, logs_dir)
+		logger.query()
 		user = Response()
-
 		for attribute in item['attributes']:
 			at_type=str(attribute['type'])
 			if at_type == 'sAMAccountName':
@@ -123,9 +179,25 @@ def fetch_users(ldap_conn, domain, principal):
 			elif at_type == 'description':
 				user.description = str(attribute['vals'][0])
 			elif at_type == 'nTSecurityDescriptor':
-				secdesc = attribute['vals'][0].asOctets()
+				secdesc = (attribute['vals'][0].asOctets())
 				user.security_descriptor.fromString(secdesc)
+			elif at_type == 'dNSHostName':
+				user.dnshostname = str(attribute['vals'][0])
+			elif at_type == 'objectSid':
+				user.objectsid = (attribute['vals'][0])
+			elif at_type == 'memberOf':
+				x = str(attribute['vals'])
+				y = "".join(x.splitlines())
+				z = y.replace('SetOf: ', '').replace(' CN=','\nCN=')
+				user.members = z
+			elif at_type == 'member':
+				x = str(attribute['vals'])
+				y = "".join(x.splitlines())
+				z = y.replace('SetOf: ', '').replace(' CN=','\nCN=')
+				user.members = z
+
 		yield user
+
 
 def resolve_key():
 	args = arg_parse()
@@ -154,16 +226,17 @@ def resolve_key():
 		return guid
 
 
-
-
-
-
 def print_user(user, sids_resolver):
 	print ("Name: {}".format(user.samaccountname))
-	print ("Description: {}".format(user.description))
+	if len(user.description) > 0:
+		print ("Description: {}".format(user.description))
+	if len(user.dnshostname) > 0:
+		print ("DNS Hostname: {}".format(user.dnshostname))
 	owner_sid = user.owner_sid.formatCanonical()
 	owner_domain, owner_name = sids_resolver.get_name_from_sid(owner_sid)
 	print("Owner SID: {} {}\{}".format(user.owner_sid.formatCanonical(), owner_domain, owner_name))
+	print("Member of: {}".format(user.memberOf))
+	print ("Group members:\n{}".format(user.members))
 
 	#write perms
 	write_owner_sids = set()
@@ -337,9 +410,6 @@ def print_user(user, sids_resolver):
 			print("      No entries found.")
 	print("")
 
-	# testing
-	print(WRITE_KEY)
-
 def print_sids(sids, sids_resolver, offset=0):
 	blanks = " " * offset
 	msg = []
@@ -388,10 +458,27 @@ def ldap_get_domain_from_sid(ldap_conn, sid):
                 name = ".".join([x.lstrip("DC=") for x in value.split(",")])
                 return
 
+
+def bofhound_logging():
+	# check for first time usage
+	home = os.path.expanduser('~')
+	aced_dir = f'{home}/.aced'
+	logs_dir = f'{aced_dir}/logs'
+
+	if not os.path.isdir(aced_dir):
+		logging.info('First time usage detected')
+		logging.info(f'aced output will be logged to {logs_dir}')
+		os.mkdir(aced_dir)
+		print()
+
+	if not os.path.isdir(logs_dir):
+		os.mkdir(logs_dir)
+	return logs_dir
+
 #objecttypes
 FORCE_CHANGE_PASSWORD = "00299570-246d-11d0-a768-00aa006e0529"
 WRITE_SPN = "f3a64788-5306-11d1-a9c5-0000f80367c1"
-WRITE_KEY = resolve_key()
+#WRITE_KEY = resolve_key()
 GET_CHANGES = "1131f6aa-9c07-11d1-f79f-00c04fc2dcd2"
 GET_CHANGES_ALL = "1131f6ad-9c07-11d1-f79f-00c04fc2dcd2"
 ALLOWED_TO_ACT = "3f78c3e5-f79a-46bd-a0b8-9d18116ddc79"
@@ -399,26 +486,47 @@ WRITE_MEMBER = "bf9679c0-0de6-11d0-a285-00aa003049e2"
 
 def main():
 
+	logger.init()
 	args = arg_parse()
+	
+	if args.debug:
+		logging.getLogger().setLevel(logging.DEBUG)
+		logging.debug(version.getInstallationPath())
+	else:
+		logging.getLogger().setLevel(logging.INFO)
+
 	ldap_conn = connect_ldap(
 		domain=args.userdomain,
 		user=args.username,
 		password=args.password,
+		lmhash=args.lmhash,
+		nthash=args.nthash,
+		aesKey=args.address,
 		dc_ip=args.address,
+		kerberos=args.kerberos,
 		scheme=args.scheme
 	)
-
+	base_dn = get_base_dn
 	sids_resolver = SidsResolver(ldap_conn)
 	domain = args.userdomain
-	principal = args.principal
-	test=list(fetch_users(ldap_conn, domain, principal))
+	print (show_banner)
+	logs_dir = bofhound_logging()
+	samaccountname = input ("Enter target sAMAccountName: ")
+	while True:
+		if samaccountname == "quit":
+			logging.info(f'User entered quit. Stopping session.')
+			logging.info(f'Results written to {logs_dir}')
+			break
+		test=list(fetch_users(ldap_conn, domain, samaccountname, logs_dir))
 
-	if not test:
-		print('Target principal "%s" not found.' % (principal))
-		exit()
-	else:
-		for user in test:
-			print_user(user, sids_resolver)
+
+		if not test:
+			logging.info(f'Target {samaccountname} not found.')
+			samaccountname = input ("Enter new sAMAccountName to search or enter quit to stop: ")
+		else:
+			for user in test:
+				print_user(user, sids_resolver)
+				samaccountname = input ("Enter new sAMAccountName to search or enter quit to stop: ")
 
 
 class SidsResolver:

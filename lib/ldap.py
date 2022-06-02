@@ -15,16 +15,23 @@ def connect_ldap(
         domain,
         user,
         password="",
+        lmhash="",
+        nthash="",
+        aesKey="",
         dc_ip=None,
+        kerberos=False,
         scheme="",
 ):
 
     base_dn = get_base_dn(domain)
 
-    if dc_ip is not None:
-        target = dc_ip
+    if kerberos:
+        target=get_machine_name(domain, dc_ip)
     else:
-        target = domain
+        if dc_ip is not None:
+            target = dc_ip
+        else:
+            target = domain
 
     if scheme is not None:
         if "ldap" in scheme:
@@ -38,11 +45,24 @@ def connect_ldap(
         dstIp=dc_ip
     )
 
-    ldap_conn.login(
-        user=user,
-        password=password,
-        domain=domain
-    )
+    if kerberos:
+        ldap_conn.kerberosLogin(
+            user=user,
+            password=password,
+            domain=domain,
+            lmhash=lmhash,
+            nthash=nthash,
+            aesKey=aesKey,
+            kdcHost=dc_ip,
+        )
+    else:
+        ldap_conn.login(
+            user=user,
+            password=password,
+            domain=domain,
+            lmhash=lmhash,
+            nthash=nthash,
+        )
 
     return ldap_conn
 
