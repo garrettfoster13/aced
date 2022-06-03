@@ -158,257 +158,257 @@ def target_creds_type(target):
 
     return (userdomain, username, password or '', '')
 
-def fetch_users(ldap_conn, domain, samaccountname, logs_dir):
-	user_filter = "(sAMAccountName={})".format(samaccountname)
-	search_base = "{}".format(get_base_dn(domain))
-	resp = search_ldap(
-		ldap_conn,
-		user_filter,
-		search_base,
-		controls = security_descriptor_control(sdflags=0x07))
 
-	for item in ldap_results(resp):
-		# get_formatted_value(item)
-		logger = logoutput(item, logs_dir)
-		logger.query()
-		user = Response()
-		for attribute in item['attributes']:
-			at_type=str(attribute['type'])
-			if at_type == 'sAMAccountName':
-				user.samaccountname = str(attribute['vals'][0])
-			elif at_type == 'description':
-				user.description = str(attribute['vals'][0])
-			elif at_type == 'nTSecurityDescriptor':
-				secdesc = (attribute['vals'][0].asOctets())
-				user.security_descriptor.fromString(secdesc)
-			elif at_type == 'dNSHostName':
-				user.dnshostname = str(attribute['vals'][0])
-			elif at_type == 'objectSid':
-				user.objectsid = (attribute['vals'][0])
-			elif at_type == 'memberOf':
-				x = str(attribute['vals'])
-				y = "".join(x.splitlines())
-				z = y.replace('SetOf: ', '').replace(' CN=','\nCN=')
-				user.members = z
-			elif at_type == 'member':
-				x = str(attribute['vals'])
-				y = "".join(x.splitlines())
-				z = y.replace('SetOf: ', '').replace(' CN=','\nCN=')
-				user.members = z
+class magic:
 
-		yield user
+	#objecttypes
 
 
-def resolve_key():
-	args = arg_parse()
-	ldap_conn = connect_ldap(
-		domain=args.userdomain,
-		user=args.username,
-		password=args.password,
-		dc_ip=args.address,
-		scheme=args.scheme
-	)
 
-	domain = args.userdomain
-	guid_filter = "(cn=ms-DS-Key-Credential-Link)"
-	search_base = "CN=Schema,CN=Configuration,{}".format(get_base_dn(domain))
-	
-	resp = search_ldap(
-		ldap_conn,
-		guid_filter,
-		search_base)
+	def __init__(self, ldap_conn, domain, samaccountname, logs_dir, sids_resolver):
+		self.ldap_conn = ldap_conn
+		self.domain = domain
+		self.samaccountname = samaccountname
+		self.logs_dir = logs_dir
+		self.sids_resolver = sids_resolver
+		self.FORCE_CHANGE_PASSWORD = "00299570-246d-11d0-a768-00aa006e0529"
+		self.WRITE_SPN = self.resolve_key("(cn=Service-Principal-Name)")
+		self.WRITE_KEY = self.resolve_key("(cn=ms-DS-Key-Credential-Link)")
+		self.GET_CHANGES = "1131f6aa-9c07-11d1-f79f-00c04fc2dcd2"
+		self.GET_CHANGES_ALL = "1131f6ad-9c07-11d1-f79f-00c04fc2dcd2"
+		self.ALLOWED_TO_ACT = "3f78c3e5-f79a-46bd-a0b8-9d18116ddc79"
+		self.WRITE_MEMBER = "bf9679c0-0de6-11d0-a285-00aa003049e2"
 
-	for item in ldap_results(resp):
-		for attribute in item['attributes']:
-			at_type=str(attribute['type'])
-			if at_type == 'schemaIDGUID':
-				guid = guid_to_string(attribute['vals'][0])
-		return guid
+	def fetch_users(self, ldap_conn, domain, samaccountname, logs_dir):
+		user_filter = "(sAMAccountName={})".format(samaccountname)
+		search_base = "{}".format(get_base_dn(domain))
+		resp = search_ldap(
+			ldap_conn,
+			user_filter,
+			search_base,
+			controls = security_descriptor_control(sdflags=0x07))
+
+		for item in ldap_results(resp):
+			# get_formatted_value(item)
+			logger = logoutput(item, logs_dir)
+			logger.query()
+			user = Response()
+			for attribute in item['attributes']:
+				at_type=str(attribute['type'])
+				if at_type == 'sAMAccountName':
+					user.samaccountname = str(attribute['vals'][0])
+				elif at_type == 'description':
+					user.description = str(attribute['vals'][0])
+				elif at_type == 'nTSecurityDescriptor':
+					secdesc = (attribute['vals'][0].asOctets())
+					user.security_descriptor.fromString(secdesc)
+				elif at_type == 'dNSHostName':
+					user.dnshostname = str(attribute['vals'][0])
+				elif at_type == 'objectSid':
+					user.objectsid = (attribute['vals'][0])
+			yield user
 
 
-def print_user(user, sids_resolver):
-	print ("Name: {}".format(user.samaccountname))
-	if len(user.description) > 0:
-		print ("Description: {}".format(user.description))
-	if len(user.dnshostname) > 0:
-		print ("DNS Hostname: {}".format(user.dnshostname))
-	owner_sid = user.owner_sid.formatCanonical()
-	owner_domain, owner_name = sids_resolver.get_name_from_sid(owner_sid)
-	print("Owner SID: {} {}\{}".format(user.owner_sid.formatCanonical(), owner_domain, owner_name))
-	print("Member of: {}".format(user.memberOf))
-	print ("Group members:\n{}".format(user.members))
+	def resolve_key(self, key):
+		# ldap_conn = ldap_conn
+		# domain = args.userdomain
+		guid_filter = key
+		search_base = "CN=Schema,CN=Configuration,{}".format(get_base_dn(self.domain))
+		
+		resp = search_ldap(
+			self.ldap_conn,
+			guid_filter,
+			search_base)
 
-	#write perms
-	write_owner_sids = set()
-	write_dacl_sids = set()
-	writespn_property_sids = set()
-	writekeycred_property_sids = set()
-	addself_property_sids = set()
-	writemember_property_sids = set()
-	allowedtoact_property_sids = set()
+		for item in ldap_results(resp):
+			for attribute in item['attributes']:
+				at_type=str(attribute['type'])
+				if at_type == 'schemaIDGUID':
+					guid = guid_to_string(attribute['vals'][0])
+			return guid
 
-	#generic perms
-	genericall_property_sids = set()
-	genericwrite_property_sids = set()
 
-	# Extended perms
-	changepass_property_sids = set()
-	allextended_property_sids = set()
-	getchanges_property_sids = set()
-	getchanges_all_property_sids = set()
+	def print_user(self, user, sids_resolver):
+		print ("Name: {}".format(user.samaccountname))
+		if len(user.description) > 0:
+			print ("Description: {}".format(user.description))
+		if len(user.dnshostname) > 0:
+			print ("DNS Hostname: {}".format(user.dnshostname))
+		owner_sid = user.owner_sid.formatCanonical()
+		owner_domain, owner_name = sids_resolver.get_name_from_sid(owner_sid)
+		print("Owner SID: {} {}\{}".format(user.owner_sid.formatCanonical(), owner_domain, owner_name))
 
-	# Read perms
-	readlaps_property_sids = set()
 
-	for ace in user.dacl.aces:
-		#ACE type 0x05
-		if ace["TypeName"] == "ACCESS_ALLOWED_OBJECT_ACE":
-			ace = ace["Ace"]
-			mask = ace["Mask"]
-			sid = ace["Sid"].formatCanonical()
+		#write perms
+		write_owner_sids = set()
+		write_dacl_sids = set()
+		writespn_property_sids = set()
+		writekeycred_property_sids = set()
+		addself_property_sids = set()
+		writemember_property_sids = set()
+		allowedtoact_property_sids = set()
 
-			if ace.hasFlag(ace.ACE_OBJECT_TYPE_PRESENT):
-				#check generics first
+		#generic perms
+		genericall_property_sids = set()
+		genericwrite_property_sids = set()
+
+		# Extended perms
+		changepass_property_sids = set()
+		allextended_property_sids = set()
+		getchanges_property_sids = set()
+		getchanges_all_property_sids = set()
+
+		# Read perms
+		readlaps_property_sids = set()
+
+		for ace in user.dacl.aces:
+			#ACE type 0x05
+			if ace["TypeName"] == "ACCESS_ALLOWED_OBJECT_ACE":
+				ace = ace["Ace"]
+				mask = ace["Mask"]
+				sid = ace["Sid"].formatCanonical()
+
+				if ace.hasFlag(ace.ACE_OBJECT_TYPE_PRESENT):
+					#check generics first
+					if mask.hasPriv(ACCESS_MASK.GENERIC_ALL):
+						genericall_property_sids.add(sid)
+					elif mask.hasPriv(ACCESS_MASK.GENERIC_WRITE):
+						genericwrite_property_sids.add(sid)
+					elif mask.hasPriv(ACCESS_MASK.WRITE_OWNER):
+						write_owner_sids.add(sid)
+					elif mask.hasPriv(ACCESS_MASK.WRITE_DACL):
+						write_owner_sids.add(sid)
+
+					# ForceChangePassword
+					elif guid_to_string(ace["ObjectType"]) == self.FORCE_CHANGE_PASSWORD:
+						changepass_property_sids.add(sid)
+					# getchanges
+					elif guid_to_string(ace["ObjectType"]) == self.GET_CHANGES:
+						getchanges_property_sids.add(sid)
+					# getchangesall
+					elif guid_to_string(ace["ObjectType"]) == self.GET_CHANGES_ALL:
+						getchanges_all_property_sids.add(sid)
+					elif mask.hasPriv(ace.ADS_RIGHT_DS_WRITE_PROP):
+						#whisker
+						if guid_to_string(ace["ObjectType"]) == self.WRITE_KEY:
+							writekeycred_property_sids.add(sid)
+						#targeted kerberoast
+						elif guid_to_string(ace["ObjectType"]) == self.WRITE_SPN:
+							writespn_property_sids.add(sid)
+						# add user to group
+						elif guid_to_string(ace["ObjectType"]) == self.WRITE_MEMBER:
+							writemember_property_sids.add(sid)
+						#RBCD
+						elif guid_to_string(ace["ObjectType"]) == self.ALLOWED_TO_ACT:
+							allowedtoact_property_sids.add(sid)
+					# elif mask.hasPriv(ace.ADS_RIGHT_DS_READ_PROP):
+					# 	if guid_to_string(ace["ObjectType"]) == READ_LAPS:
+					# 		readlaps_property_sids.add(sid)
+
+					# add self to group
+					elif mask.hasPriv(ace.ADS_RIGHT_DS_SELF):
+						if guid_to_string(ace["ObjectType"]) == self.WRITE_MEMBER:
+							addself_property_sids.add(sid)
+				# empty objecttype but ADS_RIGHT true means it applies to all objects
+				if not ace.hasFlag(ace.ACE_OBJECT_TYPE_PRESENT):
+					# all extended rights
+					if mask.hasPriv(ace.ADS_RIGHT_DS_CONTROL_ACCESS):
+						allextended_property_sids.add(sid)
+					# generic write
+					elif mask.hasPriv(ace.ADS_RIGHT_DS_WRITE_PROP):
+						genericwrite_property_sids.add(sid)
+
+			#ACE type 0x00
+			elif ace["TypeName"] == "ACCESS_ALLOWED_ACE":
+				ace = ace["Ace"]
+				mask = ace["Mask"]
+				sid = ace["Sid"].formatCanonical()
 				if mask.hasPriv(ACCESS_MASK.GENERIC_ALL):
 					genericall_property_sids.add(sid)
-				elif mask.hasPriv(ACCESS_MASK.GENERIC_WRITE):
+				if mask.hasPriv(ACCESS_MASK.GENERIC_WRITE):
 					genericwrite_property_sids.add(sid)
-				elif mask.hasPriv(ACCESS_MASK.WRITE_OWNER):
+				if mask.hasPriv(ACCESS_MASK.WRITE_OWNER):
 					write_owner_sids.add(sid)
-				elif mask.hasPriv(ACCESS_MASK.WRITE_DACL):
-					write_owner_sids.add(sid)
-
-				# ForceChangePassword
-				elif guid_to_string(ace["ObjectType"]) == FORCE_CHANGE_PASSWORD:
-					changepass_property_sids.add(sid)
-				# getchanges
-				elif guid_to_string(ace["ObjectType"]) == GET_CHANGES:
-					getchanges_property_sids.add(sid)
-				# getchangesall
-				elif guid_to_string(ace["ObjectType"]) == GET_CHANGES_ALL:
-					getchanges_all_property_sids.add(sid)
-				elif mask.hasPriv(ace.ADS_RIGHT_DS_WRITE_PROP):
-					#whisker
-					if guid_to_string(ace["ObjectType"]) == WRITE_KEY:
-						writekeycred_property_sids.add(sid)
-					#targeted kerberoast
-					elif guid_to_string(ace["ObjectType"]) == WRITE_SPN:
-						writespn_property_sids.add(sid)
-					# add user to group
-					elif guid_to_string(ace["ObjectType"]) == WRITE_MEMBER:
-						writemember_property_sids.add(sid)
-					#RBCD
-					elif guid_to_string(ace["ObjectType"]) == ALLOWED_TO_ACT:
-						allowedtoact_property_sids.add(sid)
-				# elif mask.hasPriv(ace.ADS_RIGHT_DS_READ_PROP):
-				# 	if guid_to_string(ace["ObjectType"]) == READ_LAPS:
-				# 		readlaps_property_sids.add(sid)
-
-				# add self to group
-				elif mask.hasPriv(ace.ADS_RIGHT_DS_SELF):
-					if guid_to_string(ace["ObjectType"]) == WRITE_MEMBER:
-						addself_property_sids.add(sid)
-			# empty objecttype but ADS_RIGHT true means it applies to all objects
-			if not ace.hasFlag(ace.ACE_OBJECT_TYPE_PRESENT):
-				# all extended rights
-				if mask.hasPriv(ace.ADS_RIGHT_DS_CONTROL_ACCESS):
+				if mask.hasPriv(ACCESS_MASK.WRITE_DACL):
+					write_dacl_sids.add(sid)
+				if mask.hasPriv(ACCESS_MASK.ADS_RIGHT_DS_CONTROL_ACCESS):
 					allextended_property_sids.add(sid)
-				# generic write
-				elif mask.hasPriv(ace.ADS_RIGHT_DS_WRITE_PROP):
-					genericwrite_property_sids.add(sid)
 
-		#ACE type 0x00
-		elif ace["TypeName"] == "ACCESS_ALLOWED_ACE":
-			ace = ace["Ace"]
-			mask = ace["Mask"]
-			sid = ace["Sid"].formatCanonical()
-			if mask.hasPriv(ACCESS_MASK.GENERIC_ALL):
-				genericall_property_sids.add(sid)
-			if mask.hasPriv(ACCESS_MASK.GENERIC_WRITE):
-				genericwrite_property_sids.add(sid)
-			if mask.hasPriv(ACCESS_MASK.WRITE_OWNER):
-				write_owner_sids.add(sid)
-			if mask.hasPriv(ACCESS_MASK.WRITE_DACL):
-				write_dacl_sids.add(sid)
-			if mask.hasPriv(ACCESS_MASK.ADS_RIGHT_DS_CONTROL_ACCESS):
-				allextended_property_sids.add(sid)
 
-		# else:
-		# 	continue
-
-	print("  Interesting Permissions:")
-	print("    Principals that can change target's password:")
-	if len(changepass_property_sids) > 0:
-		print_sids(changepass_property_sids, sids_resolver, offset=6)
-	else:
-		print("      No entries found.")
-
-	print("    Principals that can modify the SPN attribute:")
-	if len(writespn_property_sids) > 0:
-		print_sids(writespn_property_sids, sids_resolver, offset=6)
-	else:
-		print("      No entries found.")
-
-	print("    Principals that can modify the msDS-KeyCredentialLink attribute:")
-	if len(writekeycred_property_sids) > 0:
-		print_sids(writekeycred_property_sids, sids_resolver, offset=6)
-	else:
-		print("      No entries found.")
-
-	print("    Principals with AllExtendedRights:")
-	if len(allextended_property_sids) > 0:
-		print_sids(allextended_property_sids, sids_resolver, offset=6)
-	else:
-		print("      No entries found.")
-	print("")
-
-	# DCSYNC
-	if (len(getchanges_property_sids) > 0) or (len(getchanges_all_property_sids) > 0):
-		print("  DCSYNC Rights:")
-		print("    Principals with GetChanges:")
-		if len(getchanges_property_sids) > 0:
-			print_sids(getchanges_property_sids, sids_resolver, offset=6)
-		if len(getchanges_all_property_sids) > 0:
-			print("    Principals with GetChangesAll:")
-		print_sids(getchanges_all_property_sids, sids_resolver, offset=6)
-	print ("")
-
-	# write permissions
-	print("  Write Permissions:")
-	print("    Principals with Write Owner:")
-	print_sids(write_owner_sids, sids_resolver, offset=6)
-
-	print("    Principals with write DACL:")
-	print_sids(write_dacl_sids, sids_resolver, offset=6)
-	print("")
-
-	# group permissionsa
-	if (len(writemember_property_sids) > 0) or (len(addself_property_sids) > 0):
-		print("  Group Permissions:")
-		print("   Principals that can add members to group:")
-		if len(writemember_property_sids) > 0:
-			print_sids(writemember_property_sids, sids_resolver, offset=6)
-		else: print("      No entries found.")
-		print("    Principals that can add themself to group:")
-		if len(addself_property_sids) > 0:
-			print_sids(addself_property_sids, sids_resolver, offset=6)
-		else: print("      No entries found.")
-	print("")
-
-	# generic permissions
-	if (len(genericwrite_property_sids) > 0) or (len(genericall_property_sids) > 0):
-		print("  Generic Permissions:")
-		print("    Principals with Generic Write:")
-		if len(genericwrite_property_sids) > 0:
-			print_sids(genericwrite_property_sids, sids_resolver, offset=6)
+		# print the stuff
+		print("  Interesting Permissions:")
+		print("    Principals that can change target's password:")
+		if len(changepass_property_sids) > 0:
+			print_sids(changepass_property_sids, sids_resolver, offset=6)
 		else:
 			print("      No entries found.")
-		print("    Principals with Generic All:")
-		if len(genericall_property_sids) > 0:
-			print_sids(genericall_property_sids, sids_resolver, offset=6)
+
+		print("    Principals that can modify the SPN attribute:")
+		if len(writespn_property_sids) > 0:
+			print_sids(writespn_property_sids, sids_resolver, offset=6)
 		else:
 			print("      No entries found.")
-	print("")
+
+		print("    Principals that can modify the msDS-KeyCredentialLink attribute:")
+		if len(writekeycred_property_sids) > 0:
+			print_sids(writekeycred_property_sids, sids_resolver, offset=6)
+		else:
+			print("      No entries found.")
+
+		print("    Principals with AllExtendedRights:")
+		if len(allextended_property_sids) > 0:
+			print_sids(allextended_property_sids, sids_resolver, offset=6)
+		else:
+			print("      No entries found.")
+		print("")
+
+		# DCSYNC
+		if (len(getchanges_property_sids) > 0) or (len(getchanges_all_property_sids) > 0):
+			print("  DCSYNC Rights:")
+			print("    Principals with GetChanges:")
+			if len(getchanges_property_sids) > 0:
+				print_sids(getchanges_property_sids, sids_resolver, offset=6)
+			if len(getchanges_all_property_sids) > 0:
+				print("    Principals with GetChangesAll:")
+			print_sids(getchanges_all_property_sids, sids_resolver, offset=6)
+		print ("")
+
+		# write permissions
+		print("  Write Permissions:")
+		print("    Principals with Write Owner:")
+		print_sids(write_owner_sids, sids_resolver, offset=6)
+
+		print("    Principals with write DACL:")
+		print_sids(write_dacl_sids, sids_resolver, offset=6)
+		print("")
+
+		# group permissionsa
+		if (len(writemember_property_sids) > 0) or (len(addself_property_sids) > 0):
+			print("  Group Permissions:")
+			print("   Principals that can add members to group:")
+			if len(writemember_property_sids) > 0:
+				print_sids(writemember_property_sids, sids_resolver, offset=6)
+			else: print("      No entries found.")
+			print("    Principals that can add themself to group:")
+			if len(addself_property_sids) > 0:
+				print_sids(addself_property_sids, sids_resolver, offset=6)
+			else: print("      No entries found.")
+		print("")
+
+		# generic permissions
+		if (len(genericwrite_property_sids) > 0) or (len(genericall_property_sids) > 0):
+			print("  Generic Permissions:")
+			print("    Principals with Generic Write:")
+			if len(genericwrite_property_sids) > 0:
+				print_sids(genericwrite_property_sids, sids_resolver, offset=6)
+			else:
+				print("      No entries found.")
+			print("    Principals with Generic All:")
+			if len(genericall_property_sids) > 0:
+				print_sids(genericall_property_sids, sids_resolver, offset=6)
+			else:
+				print("      No entries found.")
+		print("")
 
 def print_sids(sids, sids_resolver, offset=0):
 	blanks = " " * offset
@@ -458,7 +458,6 @@ def ldap_get_domain_from_sid(ldap_conn, sid):
                 name = ".".join([x.lstrip("DC=") for x in value.split(",")])
                 return
 
-
 def bofhound_logging():
 	# check for first time usage
 	home = os.path.expanduser('~')
@@ -475,57 +474,43 @@ def bofhound_logging():
 		os.mkdir(logs_dir)
 	return logs_dir
 
-#objecttypes
-FORCE_CHANGE_PASSWORD = "00299570-246d-11d0-a768-00aa006e0529"
-WRITE_SPN = "f3a64788-5306-11d1-a9c5-0000f80367c1"
-#WRITE_KEY = resolve_key()
-GET_CHANGES = "1131f6aa-9c07-11d1-f79f-00c04fc2dcd2"
-GET_CHANGES_ALL = "1131f6ad-9c07-11d1-f79f-00c04fc2dcd2"
-ALLOWED_TO_ACT = "3f78c3e5-f79a-46bd-a0b8-9d18116ddc79"
-WRITE_MEMBER = "bf9679c0-0de6-11d0-a285-00aa003049e2"
-
 def main():
-
-	logger.init()
+	print (show_banner)
 	args = arg_parse()
-	
-	if args.debug:
-		logging.getLogger().setLevel(logging.DEBUG)
-		logging.debug(version.getInstallationPath())
-	else:
-		logging.getLogger().setLevel(logging.INFO)
-
 	ldap_conn = connect_ldap(
-		domain=args.userdomain,
-		user=args.username,
-		password=args.password,
-		lmhash=args.lmhash,
-		nthash=args.nthash,
-		aesKey=args.address,
-		dc_ip=args.address,
-		kerberos=args.kerberos,
-		scheme=args.scheme
-	)
-	base_dn = get_base_dn
+	domain=args.userdomain,
+	user=args.username,
+	password=args.password,
+	lmhash=args.lmhash,
+	nthash=args.nthash,
+	aesKey=args.address,
+	dc_ip=args.address,
+	kerberos=args.kerberos,
+	scheme=args.scheme
+)
+	
+	logger.init()
+	logging.getLogger().setLevel(logging.INFO)
+	logs_dir = bofhound_logging()
+	
 	sids_resolver = SidsResolver(ldap_conn)
 	domain = args.userdomain
-	print (show_banner)
-	logs_dir = bofhound_logging()
+	
 	samaccountname = input ("Enter target sAMAccountName: ")
+	please = magic(ldap_conn, domain, samaccountname, logs_dir, sids_resolver)
 	while True:
 		if samaccountname == "quit":
 			logging.info(f'User entered quit. Stopping session.')
 			logging.info(f'Results written to {logs_dir}')
 			break
-		test=list(fetch_users(ldap_conn, domain, samaccountname, logs_dir))
-
+		test=list(please.fetch_users(ldap_conn, domain, samaccountname, logs_dir))
 
 		if not test:
 			logging.info(f'Target {samaccountname} not found.')
 			samaccountname = input ("Enter new sAMAccountName to search or enter quit to stop: ")
 		else:
 			for user in test:
-				print_user(user, sids_resolver)
+				please.print_user(user, sids_resolver)
 				samaccountname = input ("Enter new sAMAccountName to search or enter quit to stop: ")
 
 
@@ -569,6 +554,7 @@ class SidsResolver:
         self.domain_sids[sid] = name
         return name
 
+#thanks dirkjan
 class ACCESS_MASK:
     # Flag constants
 

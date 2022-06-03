@@ -20,7 +20,7 @@ class logoutput:
         'lockoutDuration']
     _bracketed_attributes = ['objectGUID']
     _annoying_attributes = ['memberOf', 'member']
-    _ignore_attributes = ['userCertificate', 'dNSHostName']
+    _ignore_attributes = ['userCertificate']
     
     def __init__(self, item, logs_dir):
         self.logs_dir = logs_dir
@@ -51,7 +51,9 @@ class logoutput:
         self._printlog(self._separator)
         for attribute in self.item['attributes']:
             at_type = str(attribute['type'])
-            if at_type in self._raw_attributes:
+            if at_type in self._ignore_attributes:
+                return None
+            elif at_type in self._raw_attributes:
                 val = (attribute['vals'][0])
                 self._printlog("{}: {}".format(at_type, val))
             elif at_type in self._base64_attributes:
