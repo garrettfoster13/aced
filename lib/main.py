@@ -180,7 +180,8 @@ class magic:
 		self.WRITE_MEMBER = "bf9679c0-0de6-11d0-a285-00aa003049e2"
 
 	def fetch_users(self, ldap_conn, domain, samaccountname, logs_dir):
-		user_filter = "(sAMAccountName={})".format(samaccountname)
+		user_filter = samaccountname
+		#user_filter = "(sAMAccountName={})".format(samaccountname)
 		search_base = "{}".format(get_base_dn(domain))
 		resp = search_ldap(
 			ldap_conn,
@@ -496,22 +497,29 @@ def main():
 	sids_resolver = SidsResolver(ldap_conn)
 	domain = args.userdomain
 	
-	samaccountname = input ("Enter target sAMAccountName: ")
-	please = magic(ldap_conn, domain, samaccountname, logs_dir, sids_resolver)
+	search_target = input ("Enter target sAMAccountName or distinguishedName: ")
+	please = magic(ldap_conn, domain, search_target, logs_dir, sids_resolver)
+	#user_filter = "(sAMAccountName={})".format(samaccountname)
 	while True:
-		if samaccountname == "quit":
+		if "CN" in search_target:
+			ldap_filter = "(distinguishedName={})".format(search_target)
+			samaccountname = ldap_filter
+		elif search_target == "quit":
 			logging.info(f'User entered quit. Stopping session.')
 			logging.info(f'Results written to {logs_dir}')
 			break
+		else:
+			ldap_filter = "(sAMAccountName={})".format(search_target)
+			samaccountname = ldap_filter
 		test=list(please.fetch_users(ldap_conn, domain, samaccountname, logs_dir))
 
 		if not test:
-			logging.info(f'Target {samaccountname} not found.')
-			samaccountname = input ("Enter new sAMAccountName to search or enter quit to stop: ")
+			logging.info(f'Target {search_target} not found.')
+			search_target = input ("Enter new sAMAccountName to search or enter quit to stop: ")
 		else:
 			for user in test:
 				please.print_user(user, sids_resolver)
-				samaccountname = input ("Enter new sAMAccountName to search or enter quit to stop: ")
+				search_target = input ("Enter new sAMAccountName to search or enter quit to stop: ")
 
 
 class SidsResolver:
