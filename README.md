@@ -59,4 +59,7 @@ And here's how that data looks when ingested into BloodHound.
 
 ![image](https://user-images.githubusercontent.com/82191679/173692260-39777e8c-339a-44d0-bfd9-1d82c092a149.png)
 
-
+# Refernces
+Thanks to the below for all the code I stole:
+[@_dirkjan](https://twitter.com/_dirkjan)
+[@fortaliceLLC](https://twitter.com/FortaliceLLC)
