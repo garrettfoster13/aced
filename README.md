@@ -1,6 +1,6 @@
 # Aced
 
-Aced is a tool to parse and resolve a singe targeted Active Direcotry principal's DACL. Aced will parse for intresting inbound access allowed privileges against the targeted account and present that data to the operator. Additionally, the logging features of [pyldapsearch](https://github.com/fortalice/pyldapsearch) have been integrated with Aced to log the targeted principal's LDAP attributes locally which can then be parsed by pyldapsearch's companion tool BOFHound to ingest the collected data into BloodHound.
+Aced is a tool to parse and resolve a singe targeted Active Direcotry principal's DACL. Aced will parse for intresting inbound access allowed privileges against the targeted account and present that data to the operator. Additionally, the logging features of [pyldapsearch](https://github.com/fortalice/pyldapsearch) have been integrated with Aced to log the targeted principal's LDAP attributes locally which can then be parsed by pyldapsearch's companion tool [BOFHound](https://github.com/fortalice/bofhound) to ingest the collected data into BloodHound.
 
 Tool to parse and resolve a single target Active Directory account's DACL.
 
