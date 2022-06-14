@@ -49,5 +49,7 @@ Optional Flags:
   -no-smb               Do not resolve DC hostname through SMB. Requires a FQDN with -dc-ip.
 ```
 
+# Demo
+![demo](https://user-images.githubusercontent.com/82191679/173688598-8e19b547-899c-4267-bdba-1b33a74e3fda.gif)
 
 
