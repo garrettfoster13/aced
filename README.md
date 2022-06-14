@@ -61,5 +61,9 @@ And here's how that data looks when ingested into BloodHound.
 
 # Refernces
 Thanks to the below for all the code I stole:
+<br>
 [@_dirkjan](https://twitter.com/_dirkjan)
+<br>
 [@fortaliceLLC](https://twitter.com/FortaliceLLC)
+<br>
+[@eloygpz](https://twitter.com/eloypgz)
