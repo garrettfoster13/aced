@@ -50,6 +50,11 @@ Optional Flags:
 ```
 
 # Demo
-![demo](https://user-images.githubusercontent.com/82191679/173688598-8e19b547-899c-4267-bdba-1b33a74e3fda.gif)
 
+In the below demo, we have the credentials for the corp.local\lowpriv account. By starting enumeration at Domain Admins, a potential path for privilege escalation is identified by walking backwards from the high value target. 
+![demo](https://user-images.githubusercontent.com/82191679/173688598-8e19b547-899c-4267-bdba-1b33a74e3fda.gif)
+ 
+And here's how that data looks when ingested into BloodHound.
+
+ 
 
