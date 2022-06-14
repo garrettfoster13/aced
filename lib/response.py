@@ -1,5 +1,6 @@
 
-from impacket.ldap.ldaptypes import SR_SECURITY_DESCRIPTOR
+
+from impacket.ldap.ldaptypes import SR_SECURITY_DESCRIPTOR, ACCESS_ALLOWED_OBJECT_ACE, ACCESS_ALLOWED_ACE, ACE
 
 
 class Response:
@@ -15,10 +16,6 @@ class Response:
 
 
 
-    def query(self):
-        for attribute in item['attributes']:
-            print(attribute)
-
     @property
     def owner_sid(self):
         return self.security_descriptor['OwnerSid']
@@ -27,12 +24,3 @@ class Response:
     @property
     def dacl(self):
         return self.security_descriptor["Dacl"]
-
-    # def group_members(self):
-    #     x = str(attribute['vals'])
-    #     y = "".join(x.splitlines())
-    #     z = y.replace('SetOf: ', '').replace(' CN=',', CN=')
-    #     return self.memberOf
-
-
-
