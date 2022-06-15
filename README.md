@@ -65,7 +65,7 @@ In the below demo, we have the credentials for the corp.local\lowpriv account. B
 <br>
 ![demo](https://user-images.githubusercontent.com/82191679/173691957-c136e4ee-b988-4586-9877-949cac9b359e.gif)
 <br>
-And here's how that data looks when ingested into BloodHound.
+And here's how that data looks when transformed by bofhound and ingested into BloodHound.
 
 ![image](https://user-images.githubusercontent.com/82191679/173692260-39777e8c-339a-44d0-bfd9-1d82c092a149.png)
 
