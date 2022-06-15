@@ -6,6 +6,16 @@ Aced is a tool to parse and resolve a single targeted Active Directory principal
 
 I wrote Aced simply because I wanted a more targeted approach to query ACLs. Bloodhound is fantastic, however, it is extremely noisy. Bloodhound collects all the things while Aced collects a single thing providing the operator more control over how and what data is collected. There's a phrase the Navy Seals use: "slow is smooth and smooth is fast" and that's the approach I tried to take with Aced. The case for detection is reduced by only querying for what LDAP wants to tell you and by not performing an action known as ["expensive ldap queries"](http://directoryadmin.blogspot.com/2019/10/hunting-bad-ldap-queries-on-your-dc.html). Aced has the option to forego SMB connections for hostname resolution. You have the option to prefer LDAPS over LDAP. With the additional integration with BloodHound, the collected data can be stored in a familiar format that can be shared with a team. Privilege escalation attack paths can be built by walking backwards from the targeted goal.
 
+# References
+Thanks to the below for all the code I stole:
+<br>
+[@_dirkjan](https://twitter.com/_dirkjan)
+<br>
+[@fortaliceLLC](https://twitter.com/FortaliceLLC)
+<br>
+[@eloygpz](https://twitter.com/eloypgz)
+
+
 ## Usage
 
 ```
@@ -59,11 +69,3 @@ And here's how that data looks when ingested into BloodHound.
 
 ![image](https://user-images.githubusercontent.com/82191679/173692260-39777e8c-339a-44d0-bfd9-1d82c092a149.png)
 
-# References
-Thanks to the below for all the code I stole:
-<br>
-[@_dirkjan](https://twitter.com/_dirkjan)
-<br>
-[@fortaliceLLC](https://twitter.com/FortaliceLLC)
-<br>
-[@eloygpz](https://twitter.com/eloypgz)
