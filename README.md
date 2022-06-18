@@ -14,6 +14,10 @@ Thanks to the below for all the code I stole:
 [@fortaliceLLC](https://twitter.com/FortaliceLLC)
 <br>
 [@eloygpz](https://twitter.com/eloypgz)
+<br>
+[@coffeegist](https://twitter.com/coffeegist)
+<br>
+[@tw1sm](https://twitter.com/Tw1sm)
 
 
 ## Usage
