@@ -475,6 +475,7 @@ class magic:
         return val                
 
     def resolve_key(self, key):
+	guid = ""
         guid_filter = key
         search_base = "CN=Schema,CN=Configuration,{}".format(self.search_base)
 
