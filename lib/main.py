@@ -393,6 +393,7 @@ class magic:
         self.GET_CHANGES_ALL = "1131f6ad-9c07-11d1-f79f-00c04fc2dcd2"
         self.ALLOWED_TO_ACT = "3f78c3e5-f79a-46bd-a0b8-9d18116ddc79"
         self.WRITE_MEMBER = "bf9679c0-0de6-11d0-a285-00aa003049e2"
+        self.ADD_ALLOWED_TO_ACT = "4c164200-20c0-11d0-a768-00aa006e0529"
         self.logs_dir = logs_dir
 
     def _prep_log(self):
@@ -522,6 +523,9 @@ class magic:
         getchanges_property_sids = set()
         getchanges_all_property_sids = set()
 
+        #RBCD
+        rbcd_property_sids = set()
+
 
         for ace in user.dacl.aces:
             #ACE type 0x05
@@ -561,8 +565,8 @@ class magic:
                         if guid_to_string(ace["ObjectType"]) == self.WRITE_MEMBER:
                             writemember_property_sids.add(sid)
                         #RBCD
-                        elif guid_to_string(ace["ObjectType"]) == self.ALLOWED_TO_ACT:
-                            allowedtoact_property_sids.add(sid)
+                        elif guid_to_string(ace["ObjectType"]) == self.ADD_ALLOWED_TO_ACT:
+                            rbcd_property_sids.add(sid)
                     #need to get this working
                     # elif mask.hasPriv(ace.ADS_RIGHT_DS_READ_PROP):
                     # 	if guid_to_string(ace["ObjectType"]) == READ_LAPS:
@@ -621,6 +625,12 @@ class magic:
             print_sids(allextended_property_sids, sids_resolver, offset=6)
         else:
             print("      No entries found.")
+
+        print("    Principals with ms-DS-Allowed-To-Act-On-Behalf-Of-Other-Identity (RBCD):")
+        if len(rbcd_property_sids) > 0:
+            print_sids(rbcd_property_sids, sids_resolver, offset=6)
+        else:
+            print("      No entries found.")
         print("")
 
         # DCSYNC
@@ -671,11 +681,11 @@ class magic:
                 print("      No entries found.")
         print("")
 
-
+#ignoresids = ["S-1-3-0", "S-1-5-18", "S-1-5-10", "S-1-1-0"]
 def print_sids(sids, sids_resolver, offset=0):
 	blanks = " " * offset
 	msg = []
-	ignoresids = ["S-1-3-0", "S-1-5-18", "S-1-5-10", "S-1-1-0"]
+	ignoresids = ["S-1-3-0", "S-1-5-18", "S-1-5-10"]
 	for sid in sids:
 		if sid not in ignoresids:
 			domain, name = sids_resolver.get_name_from_sid(sid)
