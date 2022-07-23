@@ -543,7 +543,7 @@ class magic:
                     elif mask.hasPriv(ACCESS_MASK.WRITE_OWNER):
                         write_owner_sids.add(sid)
                     elif mask.hasPriv(ACCESS_MASK.WRITE_DACL):
-                        write_owner_sids.add(sid)
+                        write_dacl_sids.add(sid)
 
                     # ForceChangePassword
                     elif guid_to_string(ace["ObjectType"]) == self.FORCE_CHANGE_PASSWORD:
