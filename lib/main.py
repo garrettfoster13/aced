@@ -801,7 +801,7 @@ def main():
     build_filter = input ("Enter target sAMAccountName or distinguishedName: ").lower()
     ldapsearch=magic(ldap_server, ldap_session, domain, logs_dir) 
     while True:
-        if "cn" in build_filter:
+        if "dc=" in build_filter:
             search = "(distinguishedName={})".format(build_filter)
             ldap_filter=search
             logging.info(f'Searching for: {build_filter}')
